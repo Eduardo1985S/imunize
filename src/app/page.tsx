@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Baby, Syringe, AlertTriangle, Plus, X } from 'lucide-react';
+import { Calendar, Clock, Baby, Syringe, AlertTriangle, Plus, X, Bell, CheckCircle, TrendingUp } from 'lucide-react';
 import styles from './page.module.css';
 
 // Eduardo Correia
@@ -20,9 +20,23 @@ interface VacinaCalculada extends VacinaCalendario {
     id: string;
 }
 
+interface EstatisticasVacinas {
+    total: number;
+    aplicadas: number;
+    atrasadas: number;
+    urgentes: number;
+    percentualCompleto: number;
+}
+
+interface ProximaVacina {
+    vacina: VacinaCalculada | null;
+    diasRestantes: number;
+}
+
 const CalendarioVacinacao = () => {
     const [dataNascimento, setDataNascimento] = useState('');
     const [vacinas, setVacinas] = useState<VacinaCalculada[]>([]);
+    const [mostrarTodas, setMostrarTodas] = useState(false);
 
     const calendarioVacinas: VacinaCalendario[] = [
         // Ao nascer
@@ -120,6 +134,31 @@ const CalendarioVacinacao = () => {
         setVacinas(prevVacinas => prevVacinas.filter(vacina => vacina.id !== id));
     };
 
+    // Calcular estatísticas
+    const calcularEstatisticas = (): EstatisticasVacinas => {
+        const hoje = new Date();
+        const vacinasRelevantes = vacinas.filter(v => v.dataVacina <= hoje || v.aplicada);
+
+        return {
+            total: vacinasRelevantes.length,
+            aplicadas: vacinas.filter(v => v.aplicada).length,
+            atrasadas: vacinas.filter(v => v.status === 'atrasada').length,
+            urgentes: vacinas.filter(v => v.status === 'urgente' && !v.aplicada).length,
+            percentualCompleto: vacinasRelevantes.length > 0 ? Math.round((vacinas.filter(v => v.aplicada).length / vacinasRelevantes.length) * 100) : 0
+        };
+    };
+
+    // Encontrar próxima vacina
+    const encontrarProximaVacina = (): ProximaVacina => {
+        const vacinasNaoAplicadas = vacinas.filter(v => !v.aplicada && v.status !== 'atrasada');
+        const proximaVacina = vacinasNaoAplicadas.length > 0 ? vacinasNaoAplicadas[0] : null;
+
+        return {
+            vacina: proximaVacina,
+            diasRestantes: proximaVacina ? proximaVacina.diasParaVacina : 0
+        };
+    };
+
     const getStatusClass = (status: VacinaCalculada['status']): string => {
         switch (status) {
             case 'urgente': return styles.vaccineUrgent;
@@ -165,12 +204,37 @@ const CalendarioVacinacao = () => {
         return data.toLocaleDateString('pt-BR');
     };
 
-    const vacinasParaExibir = vacinas.filter((vacina: VacinaCalculada) =>
-        vacina.status === 'urgente' ||
-        vacina.status === 'proxima' ||
-        vacina.status === 'atrasada' ||
-        vacina.aplicada
-    );
+    const formatarIdade = (dataNascimento: string): string => {
+        if (!dataNascimento) return '';
+
+        const nascimento = new Date(dataNascimento);
+        const hoje = new Date();
+        const diffTime = hoje.getTime() - nascimento.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 30) {
+            return `${diffDays} dia${diffDays !== 1 ? 's' : ''}`;
+        } else if (diffDays < 365) {
+            const meses = Math.floor(diffDays / 30);
+            return `${meses} mês${meses !== 1 ? 'es' : ''}`;
+        } else {
+            const anos = Math.floor(diffDays / 365);
+            const mesesRestantes = Math.floor((diffDays % 365) / 30);
+            return `${anos} ano${anos !== 1 ? 's' : ''}${mesesRestantes > 0 ? ` e ${mesesRestantes} mês${mesesRestantes !== 1 ? 'es' : ''}` : ''}`;
+        }
+    };
+
+    const vacinasParaExibir = mostrarTodas
+        ? vacinas
+        : vacinas.filter((vacina: VacinaCalculada) =>
+            vacina.status === 'urgente' ||
+            vacina.status === 'proxima' ||
+            vacina.status === 'atrasada' ||
+            vacina.aplicada
+        );
+
+    const estatisticas = calcularEstatisticas();
+    const proximaVacina = encontrarProximaVacina();
 
     return (
         <div className={styles.container}>
@@ -201,16 +265,90 @@ const CalendarioVacinacao = () => {
                 </div>
 
                 {dataNascimento && (
-                    <button
-                        onClick={calcularVacinas}
-                        className={styles.btnPrimary}
-                        type="button"
-                    >
-                        <Plus size={20} />
-                        Gerar Calendário
-                    </button>
+                    <div className="flex gap-4 flex-wrap">
+                        <button
+                            onClick={calcularVacinas}
+                            className={styles.btnPrimary}
+                            type="button"
+                        >
+                            <Plus size={20} />
+                            Gerar Calendário
+                        </button>
+                        <button
+                            onClick={() => setMostrarTodas(!mostrarTodas)}
+                            className={styles.btnSecondary}
+                            type="button"
+                        >
+                            <Calendar size={20} />
+                            {mostrarTodas ? 'Mostrar Prioritárias' : 'Mostrar Todas'}
+                        </button>
+                    </div>
                 )}
             </div>
+
+            {dataNascimento && vacinas.length > 0 && (
+                <>
+                    {/* Painel de Informações */}
+                    <div className={styles.infoPanel}>
+                        <div className={styles.babyInfo}>
+                            <Baby size={24} />
+                            <div>
+                                <h3>Idade do bebê</h3>
+                                <p>{formatarIdade(dataNascimento)}</p>
+                            </div>
+                        </div>
+
+                        {/* Próxima Vacina */}
+                        {proximaVacina.vacina && (
+                            <div className={styles.nextVaccineCard}>
+                                <div className={styles.nextVaccineHeader}>
+                                    <Bell size={20} />
+                                    <h3>Próxima Vacina</h3>
+                                </div>
+                                <div className={styles.nextVaccineContent}>
+                                    <h4>{proximaVacina.vacina.nome}</h4>
+                                    <p className={styles.nextVaccineDate}>
+                                        {formatarData(proximaVacina.vacina.dataVacina)}
+                                    </p>
+                                    <p className={styles.nextVaccineDays}>
+                                        {proximaVacina.diasRestantes > 0
+                                            ? `Em ${proximaVacina.diasRestantes} dias`
+                                            : proximaVacina.diasRestantes === 0
+                                                ? 'Hoje!'
+                                                : 'Atrasada'
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Estatísticas */}
+                        <div className={styles.statsGrid}>
+                            <div className={styles.statCard}>
+                                <CheckCircle size={20} />
+                                <div>
+                                    <span className={styles.statNumber}>{estatisticas.aplicadas}</span>
+                                    <span className={styles.statLabel}>Aplicadas</span>
+                                </div>
+                            </div>
+                            <div className={styles.statCard}>
+                                <AlertTriangle size={20} />
+                                <div>
+                                    <span className={styles.statNumber}>{estatisticas.atrasadas + estatisticas.urgentes}</span>
+                                    <span className={styles.statLabel}>Pendentes</span>
+                                </div>
+                            </div>
+                            <div className={styles.statCard}>
+                                <TrendingUp size={20} />
+                                <div>
+                                    <span className={styles.statNumber}>{estatisticas.percentualCompleto}%</span>
+                                    <span className={styles.statLabel}>Completo</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
 
             {vacinasParaExibir.length > 0 ? (
                 <div className={styles.vaccineGrid}>
@@ -256,6 +394,11 @@ const CalendarioVacinacao = () => {
                                         🕐 Faltam {vacina.diasParaVacina} dias
                                     </p>
                                 )}
+                                {vacina.status === 'proxima' && (
+                                    <p className={styles.vaccineUpcomingText}>
+                                        📅 Faltam {vacina.diasParaVacina} dias
+                                    </p>
+                                )}
                             </div>
 
                             {!vacina.aplicada && (
@@ -286,8 +429,10 @@ const CalendarioVacinacao = () => {
                     <Baby className={styles.emptyStateIcon} size={64} />
                     <h3 className={styles.emptyStateTitle}>Calendário Calculado!</h3>
                     <p className={styles.emptyStateText}>
-                        Todas as vacinas estão em dia ou são muito futuras.
-                        <br />Clique em &quot;Gerar Calendário&quot; para ver todas as vacinas.
+                        {mostrarTodas
+                            ? 'Nenhuma vacina encontrada.'
+                            : 'Todas as vacinas estão em dia ou são muito futuras. Clique em "Mostrar Todas" para ver o calendário completo.'
+                        }
                     </p>
                 </div>
             ) : (
