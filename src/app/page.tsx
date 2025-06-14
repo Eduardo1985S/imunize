@@ -3,11 +3,28 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, Baby, Syringe, AlertTriangle, Plus, X } from 'lucide-react';
 import styles from './page.module.css';
 
+// Eduardo Correia
+
+interface VacinaCalendario {
+    nome: string;
+    idade: string;
+    diasApos: number;
+    descricao: string;
+}
+
+interface VacinaCalculada extends VacinaCalendario {
+    dataVacina: Date;
+    diasParaVacina: number;
+    status: 'urgente' | 'proxima' | 'aplicada' | 'atrasada' | 'futura';
+    aplicada: boolean;
+    id: string;
+}
+
 const CalendarioVacinacao = () => {
     const [dataNascimento, setDataNascimento] = useState('');
-    const [vacinas, setVacinas] = useState([]);
+    const [vacinas, setVacinas] = useState<VacinaCalculada[]>([]);
 
-    const calendarioVacinas = [
+    const calendarioVacinas: VacinaCalendario[] = [
         // Ao nascer
         { nome: 'BCG', idade: '0 meses', diasApos: 0, descricao: 'Tuberculose' },
         { nome: 'Hepatite B (1ª dose)', idade: '0 meses', diasApos: 0, descricao: 'Hepatite B' },
@@ -55,31 +72,23 @@ const CalendarioVacinacao = () => {
         { nome: 'Varicela (reforço)', idade: '4 anos', diasApos: 1460, descricao: 'Catapora' }
     ];
 
-    useEffect(() => {
-        if (dataNascimento) {
-            calcularVacinas();
-        }
-    }, [dataNascimento]);
-
-    const calcularVacinas = () => {
+    const calcularVacinas = React.useCallback(() => {
         const nascimento = new Date(dataNascimento);
         const hoje = new Date();
 
-        const vacinasCalculadas = calendarioVacinas.map(vacina => {
+        const vacinasCalculadas: VacinaCalculada[] = calendarioVacinas.map(vacina => {
             const dataVacina = new Date(nascimento);
             dataVacina.setDate(nascimento.getDate() + vacina.diasApos);
 
-            const diasParaVacina = Math.ceil((dataVacina - hoje) / (1000 * 60 * 60 * 24));
+            const diasParaVacina = Math.ceil((dataVacina.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
 
-            let status = '';
+            let status: VacinaCalculada['status'] = 'futura';
             if (diasParaVacina < 0) {
                 status = Math.abs(diasParaVacina) > 30 ? 'atrasada' : 'urgente';
             } else if (diasParaVacina <= 7) {
                 status = 'urgente';
             } else if (diasParaVacina <= 30) {
                 status = 'proxima';
-            } else {
-                status = 'futura';
             }
 
             return {
@@ -92,20 +101,26 @@ const CalendarioVacinacao = () => {
             };
         });
 
-        setVacinas(vacinasCalculadas.sort((a, b) => a.dataVacina - b.dataVacina));
-    };
+        setVacinas(vacinasCalculadas.sort((a, b) => a.dataVacina.getTime() - b.dataVacina.getTime()));
+    }, [dataNascimento]);
 
-    const marcarComoAplicada = (id) => {
-        setVacinas(vacinas.map(vacina =>
-            vacina.id === id ? { ...vacina, aplicada: true, status: 'aplicada' } : vacina
+    useEffect(() => {
+        if (dataNascimento) {
+            calcularVacinas();
+        }
+    }, [dataNascimento, calcularVacinas]);
+
+    const marcarComoAplicada = (id: string) => {
+        setVacinas(prevVacinas => prevVacinas.map(vacina =>
+            vacina.id === id ? { ...vacina, aplicada: true, status: 'aplicada' as const } : vacina
         ));
     };
 
-    const removerVacina = (id) => {
-        setVacinas(vacinas.filter(vacina => vacina.id !== id));
+    const removerVacina = (id: string) => {
+        setVacinas(prevVacinas => prevVacinas.filter(vacina => vacina.id !== id));
     };
 
-    const getStatusClass = (status) => {
+    const getStatusClass = (status: VacinaCalculada['status']): string => {
         switch (status) {
             case 'urgente': return styles.vaccineUrgent;
             case 'proxima': return styles.vaccineUpcoming;
@@ -115,7 +130,7 @@ const CalendarioVacinacao = () => {
         }
     };
 
-    const getStatusText = (status) => {
+    const getStatusText = (status: VacinaCalculada['status']): string => {
         switch (status) {
             case 'urgente': return 'Urgente';
             case 'proxima': return 'Próxima';
@@ -126,7 +141,7 @@ const CalendarioVacinacao = () => {
         }
     };
 
-    const getStatusTextClass = (status) => {
+    const getStatusTextClass = (status: VacinaCalculada['status']): string => {
         switch (status) {
             case 'urgente': return styles.statusUrgent;
             case 'proxima': return styles.statusUpcoming;
@@ -136,7 +151,7 @@ const CalendarioVacinacao = () => {
         }
     };
 
-    const getIconClass = (status) => {
+    const getIconClass = (status: VacinaCalculada['status']): string => {
         switch (status) {
             case 'urgente': return styles.iconUrgent;
             case 'proxima': return styles.iconUpcoming;
@@ -146,11 +161,11 @@ const CalendarioVacinacao = () => {
         }
     };
 
-    const formatarData = (data) => {
+    const formatarData = (data: Date): string => {
         return data.toLocaleDateString('pt-BR');
     };
 
-    const vacinasParaExibir = vacinas.filter(vacina =>
+    const vacinasParaExibir = vacinas.filter((vacina: VacinaCalculada) =>
         vacina.status === 'urgente' ||
         vacina.status === 'proxima' ||
         vacina.status === 'atrasada' ||
@@ -189,6 +204,7 @@ const CalendarioVacinacao = () => {
                     <button
                         onClick={calcularVacinas}
                         className={styles.btnPrimary}
+                        type="button"
                     >
                         <Plus size={20} />
                         Gerar Calendário
@@ -227,16 +243,16 @@ const CalendarioVacinacao = () => {
                                     <Calendar size={16} />
                                     <span>Data: {formatarData(vacina.dataVacina)}</span>
                                 </div>
-                                <p style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '0.5rem' }}>
+                                <p className={styles.vaccineDescription}>
                                     {vacina.descricao}
                                 </p>
                                 {vacina.status === 'atrasada' && (
-                                    <p style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: '600', marginTop: '0.5rem' }}>
+                                    <p className={styles.vaccineWarning}>
                                         ⚠️ Atrasada há {Math.abs(vacina.diasParaVacina)} dias
                                     </p>
                                 )}
                                 {vacina.status === 'urgente' && vacina.diasParaVacina >= 0 && (
-                                    <p style={{ fontSize: '0.85rem', color: '#d97706', fontWeight: '600', marginTop: '0.5rem' }}>
+                                    <p className={styles.vaccineUrgentText}>
                                         🕐 Faltam {vacina.diasParaVacina} dias
                                     </p>
                                 )}
@@ -247,6 +263,7 @@ const CalendarioVacinacao = () => {
                                     <button
                                         onClick={() => marcarComoAplicada(vacina.id)}
                                         className={`${styles.btnAction} ${styles.btnComplete}`}
+                                        type="button"
                                     >
                                         <Syringe size={16} />
                                         Marcar como Aplicada
@@ -254,6 +271,7 @@ const CalendarioVacinacao = () => {
                                     <button
                                         onClick={() => removerVacina(vacina.id)}
                                         className={`${styles.btnAction} ${styles.btnRemove}`}
+                                        type="button"
                                     >
                                         <X size={16} />
                                         Remover
@@ -269,7 +287,7 @@ const CalendarioVacinacao = () => {
                     <h3 className={styles.emptyStateTitle}>Calendário Calculado!</h3>
                     <p className={styles.emptyStateText}>
                         Todas as vacinas estão em dia ou são muito futuras.
-                        <br />Clique em "Gerar Calendário" para ver todas as vacinas.
+                        <br />Clique em &quot;Gerar Calendário&quot; para ver todas as vacinas.
                     </p>
                 </div>
             ) : (
